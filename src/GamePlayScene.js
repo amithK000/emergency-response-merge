@@ -55,8 +55,64 @@ class GamePlayScene extends Phaser.Scene {
         // Update coins display
         this.coinsText.setText(`Coins: ${GameState.coins}`);
         
-        // Log emergencies for testing
-        console.log('Emergencies:', this.emergencyManager.emergencies);
+        // Add XP display if not already added
+        if (!this.xpText) {
+            this.xpText = this.add.text(200, 20, `XP: ${GameState.xp} / 100 (Level ${GameState.level})`, {
+                fontSize: '18px',
+                fill: '#fff'
+            });
+        } else {
+            this.xpText.setText(`XP: ${GameState.xp} / 100 (Level ${GameState.level})`);
+        }
+    }
+    
+    showRewardAnimation(x, y, amount) {
+        // Create floating text animation for reward
+        const rewardText = this.add.text(x, y, `+${amount}`, {
+            fontSize: '24px',
+            fill: '#FFFF00',
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5).setDepth(100)
+        .setAlpha(1)
+        .setScale(0.5)
+        .setData('created', Date.now())
+        .setData('duration', 1500);
+        
+        // Animate the reward text floating up and fading out
+        this.tweens.add({
+            targets: rewardText,
+            y: y - 50,
+            alpha: 0,
+            scale: 1.5,
+            duration: 1500,
+            ease: 'Power2'
+        });
+        
+        return rewardText;
+    }
+    
+    showMessage(text, color = '#FFFFFF') {
+        // Create a message at the bottom of the screen
+        const message = this.add.text(400, 550, text, {
+            fontSize: '20px',
+            fill: color,
+            stroke: '#000000',
+            strokeThickness: 2
+        }).setOrigin(0.5).setDepth(100)
+        .setAlpha(1)
+        .setData('created', Date.now())
+        .setData('duration', 2000);
+        
+        // Animate the message fading out
+        this.tweens.add({
+            targets: message,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2'
+        });
+        
+        return message;
     }
     
     createEmergencySprite(emergency) {
@@ -121,6 +177,22 @@ class GamePlayScene extends Phaser.Scene {
                 this.createEmergencySprite(emergency);
             }
         });
+        
+        // Update vehicle cooldown if active
+        if (this.vehicle && this.vehicle.cooldown > 0) {
+            this.vehicle.cooldown -= 1/60; // Decrease by approximately 1 second (assuming 60 FPS)
+            if (this.vehicle.cooldown < 0) this.vehicle.cooldown = 0;
+        }
+        
+        // Remove any expired reward animations
+        this.children.list.forEach(child => {
+            if (child.getData('created') && child.getData('duration')) {
+                const elapsed = Date.now() - child.getData('created');
+                if (elapsed > child.getData('duration')) {
+                    child.destroy();
+                }
+            }
+        });
     }
     
     handleEmergencyClick(emergency) {
@@ -128,32 +200,49 @@ class GamePlayScene extends Phaser.Scene {
         if (this.vehicle && this.vehicle.cooldown === 0) {
             console.log('Vehicle dispatched to emergency');
             
-            // Resolve the emergency
-            const reward = this.emergencyManager.resolveEmergency(emergency.id, this.vehicle);
-            
-            // Add coins to game state
-            if (reward > 0) {
-                GameState.addCoins(reward);
-                GameState.addXP(10);
+            // Create dispatch animation
+            const sprite = this.emergencySprites[emergency.id];
+            if (sprite) {
+                // Create a vehicle sprite that moves from bottom to emergency
+                const vehicleSprite = this.add.rectangle(400, 500, 30, 20, this.vehicle.type === 'firetruck' ? 0xFF0000 : 0xFFFFFF);
                 
-                // Show reward animation
-                const sprite = this.emergencySprites[emergency.id];
-                if (sprite) {
-                    this.add.text(sprite.x, sprite.y, `+${reward}`, {
-                        fontSize: '24px',
-                        fill: '#FFFF00'
-                    }).setOrigin(0.5).setDepth(100)
-                    .setAlpha(1)
-                    .setScale(0.5)
-                    .setData('created', Date.now())
-                    .setData('duration', 1500);
-                }
+                // Animate vehicle moving to emergency
+                this.tweens.add({
+                    targets: vehicleSprite,
+                    x: sprite.x,
+                    y: sprite.y,
+                    duration: 1000,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        // Remove vehicle sprite
+                        vehicleSprite.destroy();
+                        
+                        // Resolve the emergency
+                        const reward = this.emergencyManager.resolveEmergency(emergency.id, this.vehicle);
+                        
+                        // Add coins to game state
+                        if (reward > 0) {
+                            GameState.addCoins(reward);
+                            GameState.addXP(10);
+                            
+                            // Show reward animation
+                            this.showRewardAnimation(sprite.x, sprite.y, reward);
+                            
+                            // Show success message
+                            this.showMessage('Emergency resolved!', '#00FF00');
+                        } else {
+                            // Show failure message if no reward
+                            this.showMessage('Emergency expired!', '#FF0000');
+                        }
+                    }
+                });
+                
+                // Set vehicle cooldown
+                this.vehicle.cooldown = 30; // 30 seconds cooldown
             }
-            
-            // Set vehicle cooldown
-            this.vehicle.cooldown = 30; // 30 seconds cooldown
         } else {
             console.log('No vehicle available or vehicle on cooldown');
+            this.showMessage('Vehicle on cooldown!', '#FF9900');
         }
     }
 }
