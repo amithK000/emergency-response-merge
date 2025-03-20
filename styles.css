@@ -1,0 +1,17 @@
+/* Basic styling for Emergency Response Merge game */
+
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #333;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+}
+
+#game-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100vw;
+    height: 100vh;
+}
